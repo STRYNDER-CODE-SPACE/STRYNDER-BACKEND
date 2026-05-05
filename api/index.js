@@ -1,20 +1,29 @@
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const axios = require('axios');
-//const nodemailer = require('nodemailer');
-const cors = require('cors');
+import dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
 
+//const bodyParser = require('body-parser');
+import axios from 'axios';
+//const nodemailer = require('nodemailer');
+import cors from 'cors';
 const app = express();
-app.use(bodyParser.json());
+
+import appendToSheet from './services/googleSheets.js';
+import sendEmails from './services/sendEmail.js';
+import appendPopupLead from "./services/popupGoogleSheets.js";
+import sendPopupEmail from "./services/sendPopUpEmail.js";
+//app.use(bodyParser.json());
 app.use(express.json())
 
 
 app.use(
   cors({
-    origin: [
-      'https://lively-rabanadas-5f4f57.netlify.app,', 'https://strynder.com'
-    ],
+    
+origin: [
+  'https://lively-rabanadas-5f4f57.netlify.app',
+  'https://strynder.com',
+  'http://localhost:5173'
+],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders:['Content-Type'],
     optionSuccessStatus:200,
@@ -74,6 +83,93 @@ app.get('', (req, res) => {
       res.status(500).json({ error: 'Failed to add email to Mailchimp. Please try again.' });
     }
   });
+
+
+
+
+  app.post('/submit-inquiry', async (req, res) => {
+  try {
+
+    const {
+      fullName,
+      email,
+      phone,
+      businessName,
+      projectType,
+      projectDescription,
+      timeline,
+      budget,
+    } = req.body;
+
+    // Save to Google Sheets
+    await appendToSheet([
+      fullName,
+      email,
+      phone,
+      businessName,
+      projectType,
+      projectDescription,
+      timeline,
+      budget,
+      new Date().toLocaleString(),
+    ]);
+
+    // Send Emails
+    await sendEmails(req.body);
+
+    res.status(200).json({
+      success: true,
+      message: 'Inquiry submitted successfully',
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong',
+    });
+  }
+});
+
+
+app.post("/popup-lead", async (req, res) => {
+
+  try {
+
+    const {
+      fullName,
+      email,
+      businessStage,
+    } = req.body;
+
+    if (!fullName || !email || !businessStage) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill all required fields",
+      });
+    }
+
+    await appendPopupLead(req.body);
+
+    await sendPopupEmail(req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "Popup lead submitted successfully",
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 const PORT = 3000;
 app.listen(PORT, () => {
