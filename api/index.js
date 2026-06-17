@@ -1,253 +1,274 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
-import express from 'express';
+import express from "express";
+import axios from "axios";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
-//const bodyParser = require('body-parser');
-import axios from 'axios';
-//const nodemailer = require('nodemailer');
-import cors from 'cors';
-const app = express();
-
-import appendToSheet from './services/googleSheets.js';
-import sendEmails from './services/sendEmail.js';
+import appendToSheet from "./services/googleSheets.js";
+import sendEmails from "./services/sendEmail.js";
 import appendPopupLead from "./services/popupGoogleSheets.js";
 import sendPopupEmail from "./services/sendPopUpEmail.js";
-//app.use(bodyParser.json());
-app.use(express.json())
 
+const app = express();
+
+// =========================
+// SECURITY MIDDLEWARE
+// =========================
+app.use(helmet());
+app.use(express.json({ limit: "1mb" }));
+
+// =========================
+// RATE LIMITING
+// =========================
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many requests. Please try again later.",
+  },
+});
+
+const inquiryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many inquiries. Please try again later.",
+  },
+});
+
+app.use(generalLimiter);
+
+// =========================
+// CORS
+// =========================
+const allowedOrigins = [
+  "https://lively-rabanadas-5f4f57.netlify.app",
+  "https://strynder.com",
+];
+
+if (process.env.NODE_ENV !== "production") {
+  allowedOrigins.push("http://localhost:5173");
+}
 
 app.use(
   cors({
-    
-origin: [
-  'https://lively-rabanadas-5f4f57.netlify.app',
-  'https://strynder.com',
-  'http://localhost:5173'
-],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders:['Content-Type'],
-    optionSuccessStatus:200,
+    allowedHeaders: ["Content-Type"],
     credentials: true,
   })
 );
 
+// =========================
+// HELPERS
+// =========================
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return email && emailRegex.test(email);
+};
 
-// Handle preflight requests
-app.options('*', cors());
+// =========================
+// ROUTES
+// =========================
 
-const { API_KEY, AUDIENCE_ID, MAILCHIMP_SERVER_PREFIX, } = process.env;
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "Strynder API is running" });
+});
 
-app.get('', (req, res) => {
-  res.send('This is the home page');
-})
+// -------------------------
+// NEWSLETTER SUBSCRIBE
+// -------------------------
+app.post("/subscribe", async (req, res) => {
+  const { email } = req.body;
 
-
-
-  // Endpoint to handle email verification and add to Mailchimp
- app.post('/subscribe', async (req, res) => {
-  
-    const { email } = req.body;
-  
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required.' });
-    }
-  
-    try {
-      console.log("try block");
-      console.log(MAILCHIMP_SERVER_PREFIX, AUDIENCE_ID, API_KEY);
-      
-      // Add email to Mailchimp
-      const response = await axios.post(
-        `https://${MAILCHIMP_SERVER_PREFIX}.api.mailchimp.com/3.0/lists/${AUDIENCE_ID}/members`,
-        {
-          email_address: email,
-          status: 'subscribed',
-        },
-        {
-          headers: {
-            Authorization: `apikey ${API_KEY}`,
-          },
-        }
-      );
-  
-      console.log('Email added to Mailchimp:', response.data);
-      res.status(200).json({ message: 'Email verified and added to Mailchimp.' });
-    } catch (error) {
-      console.error('Error adding to Mailchimp:', error.response?.data || error.message);
-      if (error.response) {
-        const { title, status, detail } = error.response.data;
-        if (title === 'Member Exists') {
-          return res.status(400).json({ error: 'This email is already subscribed to the newsletter.' });
-        }
-      }
-      res.status(500).json({ error: 'Failed to add email to Mailchimp. Please try again.' });
-    }
-  });
-
-
-
-
-  app.post('/submit-inquiry', async (req, res) => {
-  try {
-
-    const {
-      fullName,
-      email,
-      phone,
-      businessName,
-      projectType,
-      projectDescription,
-      timeline,
-      budget,
-    } = req.body;
-
-    // Save to Google Sheets
-    await appendToSheet([
-      fullName,
-      email,
-      phone,
-      businessName,
-      projectType,
-      projectDescription,
-      timeline,
-      budget,
-      new Date().toLocaleString(),
-    ]);
-
-    // Send Emails
-    await sendEmails(req.body);
-
-    res.status(200).json({
-      success: true,
-      message: 'Inquiry submitted successfully',
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).json({
+  if (!email) {
+    return res.status(400).json({
       success: false,
-      message: 'Something went wrong',
+      message: "Email is required.",
+    });
+  }
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({
+      success: false,
+      message: "Please provide a valid email address.",
+    });
+  }
+
+  const { API_KEY, AUDIENCE_ID, MAILCHIMP_SERVER_PREFIX } = process.env;
+
+  if (!API_KEY || !AUDIENCE_ID || !MAILCHIMP_SERVER_PREFIX) {
+    console.error("❌ Mailchimp environment variables are not configured");
+    return res.status(500).json({
+      success: false,
+      message: "Newsletter signup is temporarily unavailable. Please try again later.",
+    });
+  }
+
+  try {
+    const response = await axios.post(
+      `https://${MAILCHIMP_SERVER_PREFIX}.api.mailchimp.com/3.0/lists/${AUDIENCE_ID}/members`,
+      {
+        email_address: email,
+        status: "subscribed",
+      },
+      {
+        headers: {
+          Authorization: `apikey ${API_KEY}`,
+        },
+      }
+    );
+
+    console.log("✅ Email added to Mailchimp:", response.data.id);
+    return res.status(200).json({
+      success: true,
+      message: "You've been subscribed to the newsletter!",
+    });
+  } catch (error) {
+    console.error("❌ Mailchimp Error:", error.response?.data || error.message);
+
+    if (error.response) {
+      const { title } = error.response.data;
+      if (title === "Member Exists") {
+        return res.status(200).json({
+          success: true,
+          message: "You're already subscribed to the newsletter.",
+        });
+      }
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to subscribe. Please try again or contact us directly.",
     });
   }
 });
 
-
-app.post("/popup-lead", async (req, res) => {
-
+// -------------------------
+// PROJECT INQUIRY
+// -------------------------
+app.post("/submit-inquiry", inquiryLimiter, async (req, res) => {
   try {
-
     const {
       fullName,
       email,
-      businessStage,
+      phone,
+      businessName,
+      projectType,
+      projectDescription,
+      timeline,
+      budget,
     } = req.body;
 
-    if (!fullName || !email || !businessStage) {
+    // --- Validation ---
+    const missingFields = [];
+    if (!fullName?.trim()) missingFields.push("fullName");
+    if (!email?.trim()) missingFields.push("email");
+    if (!projectType?.trim()) missingFields.push("projectType");
+    if (!projectDescription?.trim()) missingFields.push("projectDescription");
+
+    if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Please fill all required fields",
+        message: `Please fill in all required fields: ${missingFields.join(", ")}`,
+        missingFields,
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid email address.",
+      });
+    }
+
+    // --- Save to Google Sheets ---
+    await appendToSheet([
+      fullName.trim(),
+      email.trim().toLowerCase(),
+      phone?.trim() || "Not provided",
+      businessName?.trim() || "Not provided",
+      projectType.trim(),
+      projectDescription.trim(),
+      timeline?.trim() || "Not specified",
+      budget?.trim() || "Not specified",
+      new Date().toLocaleString(),
+    ]);
+
+    // --- Send Emails ---
+    await sendEmails(req.body);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Your inquiry has been submitted successfully! Check your email for next steps.",
+    });
+  } catch (error) {
+    console.error("❌ Inquiry Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message:
+        "We couldn't process your inquiry right now. Please try again or email us at strynderhelp@gmail.com",
+    });
+  }
+});
+
+// -------------------------
+// POPUP LEAD
+// -------------------------
+app.post("/popup-lead", inquiryLimiter, async (req, res) => {
+  try {
+    const { fullName, email, businessStage } = req.body;
+
+    if (!fullName?.trim() || !email?.trim() || !businessStage?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill in all required fields.",
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid email address.",
       });
     }
 
     await appendPopupLead(req.body);
-
     await sendPopupEmail(req.body);
 
     return res.status(200).json({
       success: true,
-      message: "Popup lead submitted successfully",
+      message: "Thanks for your interest! Check your email for next steps.",
     });
-
   } catch (error) {
-
-    console.error(error);
-
+    console.error("❌ Popup Lead Error:", error.message);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        "Something went wrong. Please try again or reach out to us directly.",
     });
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// =========================
+// START SERVER
+// =========================
+const PORT = process.env.PORT || 3000;
 
-
-  // Step 2: Add to Mailchimp if email is valid
-      /*const response = await axios.post(
-        `https://${MAILCHIMP_SERVER_PREFIX}.api.mailchimp.com/3.0/lists/${AUDIENCE_ID}/members`,
-        {
-          email_address: email,
-          status: 'subscribed',
-        },
-        {
-          headers: {
-            Authorization: `apikey ${API_KEY}`,
-          },
-        }
-      );
-
-      console.log('Added to Mailchimp:', mailchimpResponse.data);*/
-  
-      //res.status(200).json({ message: 'Email added to Mailchimp and verification email sent.' });
-    /*} catch (error) {
-      console.error('Error:', error.response?.data || error.message);
-      res.status(500).json({ error: 'Failed to subscribe. Please try again.' });
-
-
-      API_KEY, AUDIENCE_ID, MAILCHIMP_SERVER_PREFIX,
-    }*/
-
-  /*if (!SMTP_HOST && !SMTP_PORT && !SMTP_USER && !SMTP_PASS && !REMOTE_HOST) {
-  console.error("Missing required environment variables");
-  process.exit(1);
-}*/
-
-//email verification setup
-/*const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: 465,
-    secure: false,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
+// Only bind to a port when running locally — Vercel manages the HTTP layer
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
   });
+}
 
-
-  const verificationURL = `http://localhost:5173//subscribe/verify`
-
-  /*app.get('/', (req,res) => {
-    res.send('serve started succefully')
-   })
-
-// end point to handle sunbcribers
-  app.post('/subscribe', async (req, res) => {
-    const { email } = req.body;
-  
-    // Step 1: Verify Email via Nodemailer
-    try {
-      await transporter.sendMail({
-        from: `"Strynder" <${SMTP_USER}>`,
-        to: email,
-        subject: 'Verify Your Email',
-        text: `Click the link to verify your email: ${verificationURL}?email=${email}`,
-        html: `<p>Click the link to verify your email:</p>
-               <a href="${verificationURL}?email=${email}">Verify your Email</a>
-               <p>If you didn't subscribe, <a href="${verificationURL}/unsubscribe?email=${email}">click here to unsubscribe</a>.</p>`,
-      }
-    );
-  
-      console.log('Verification email sent. kindly check your mail');
-      res.status(200).json({ message: 'Verification email sent.' });
-    } catch (error) {
-      console.error('Error:', error.message);
-      res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
-    }
-  
-    
-  });*/
+export default app;

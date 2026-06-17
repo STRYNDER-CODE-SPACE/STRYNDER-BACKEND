@@ -1,15 +1,21 @@
 import { Resend } from "resend";
 
-const sendEmails = async (data) => {
-  
-  try {
+let resendInstance = null;
+const getResend = () => {
+  if (!resendInstance) {
+    resendInstance = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendInstance;
+};
 
-    // Initialize Resend
-    const resend = new Resend(process.env.RESEND_API_KEY);
+const sendEmails = async (data) => {
+  try {
+    const resend = getResend();
 
     const {
       fullName,
       email,
+      
       projectType,
       projectDescription,
     } = data;
@@ -19,7 +25,7 @@ const sendEmails = async (data) => {
     // =========================
 
     const userEmailResponse = await resend.emails.send({
-      from: "hello@mail.strynder.com",
+      from: "Olatunji from Strynder <hello@mail.strynder.com>",
       to: [email],
       subject: "We Received Your Inquiry",
       html: `
@@ -43,9 +49,20 @@ const sendEmails = async (data) => {
           Based on your submission, the next step is to align on your goals and map out the best execution path
           </p>
 
-          <p>
-          👉 Schedule a quick session with us here: [09068150411]
-          </p>
+        <a 
+          href="https://calendly.com/lawaltosine01/30min"
+          style="
+            background:#7416F3;
+            color:white;
+            padding:12px 20px;
+            border-radius:8px;
+            text-decoration:none;
+            display:inline-block;
+            margin-top:20px;
+          "
+        >
+          Book a Strategy Call
+        </a>
 
          <p>During this session, we'll:</p>
 
@@ -65,14 +82,14 @@ const sendEmails = async (data) => {
       `,
     });
 
-    console.log("✅ User email sent:", userEmailResponse);
+    console.log("✅ User email sent, ID:", userEmailResponse.id);
 
     // =========================
     // EMAIL TO ADMIN
     // =========================
 
     const adminEmailResponse = await resend.emails.send({
-      from: "hello@mail.strynder.com",
+      from: "Strynder Lead System <hello@mail.strynder.com>",
       to: [process.env.ADMIN_EMAIL],
       subject: "New Project Inquiry",
       html: `
@@ -94,7 +111,7 @@ const sendEmails = async (data) => {
       `,
     });
 
-    console.log("✅ Admin email sent:", adminEmailResponse);
+    console.log("✅ Admin email sent, ID:", adminEmailResponse.id);
 
     console.log("✅ All emails processed successfully");
 
@@ -110,7 +127,7 @@ const sendEmails = async (data) => {
       console.error("Response data:", error.response.data);
     }
 
-    throw error;
+    throw new Error("Failed to send inquiry emails", { cause: error });
   }
 };
 

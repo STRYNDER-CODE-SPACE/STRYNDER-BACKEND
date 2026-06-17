@@ -1,25 +1,29 @@
 import { Resend } from "resend";
 
+let resendInstance = null;
+const getResend = () => {
+  if (!resendInstance) {
+    resendInstance = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendInstance;
+};
+
 const sendPopupEmail = async (data) => {
+  try {
+    const resend = getResend();
+    const { fullName, email } = data;
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  const {
-    fullName,
-    email,
-  } = data;
-
-  await resend.emails.send({
-    from: "hello@mail.strynder.com",
-    to: [email],
-    subject: "Welcome to Strynder",
-    html: `
+    await resend.emails.send({
+      from: "Olatunji from Strynder <hello@mail.strynder.com>",
+      to: [email],
+      subject: "Welcome to Strynder",
+      html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.7; max-width: 600px; margin: auto;">
 
         <h2>Hi ${fullName},</h2>
 
         <p>
-          You’re here because you know your business can do more.
+          You're here because you know your business can do more.
         </p>
 
         <p>
@@ -27,20 +31,20 @@ const sendPopupEmail = async (data) => {
         </p>
 
         <p>
-          Most businesses don’t fail because of lack of effort.
-          They stall because they don’t have the right systems in place.
+          Most businesses don't fail because of lack of effort.
+          They stall because they don't have the right systems in place.
         </p>
 
         <p>
-          That’s where we come in.
+          That's where we come in.
         </p>
 
         <p>
-          Based on what you shared, we’d love to understand your goals a bit deeper and show you exactly how we can support you.
+          Based on what you shared, we'd love to understand your goals a bit deeper and show you exactly how we can support you.
         </p>
 
         <p>
-          👉 <a href="https://strynder.com/project-inquiry">
+          👉 <a style="background-color: #007bff; color: white; text-decoration: none; padding: 10px 20px; border-radius: 5px;" href="https://strynder.com/project-inquiry">
           Start here
           </a>
         </p>
@@ -50,7 +54,7 @@ const sendPopupEmail = async (data) => {
         </p>
 
         <p>
-          Once you complete it, we’ll:
+          Once you complete it, we'll:
         </p>
 
         <ul>
@@ -75,9 +79,16 @@ const sendPopupEmail = async (data) => {
 
       </div>
     `,
-  });
+    });
 
-  console.log("✅ Popup email sent");
+    console.log("✅ Popup email sent to:", email);
+  } catch (error) {
+    console.error("❌ Popup Email Error:", error.message);
+    if (error.response) {
+      console.error("Resend response data:", error.response.data);
+    }
+    throw new Error("Failed to send popup email", { cause: error });
+  }
 };
 
 export default sendPopupEmail;
