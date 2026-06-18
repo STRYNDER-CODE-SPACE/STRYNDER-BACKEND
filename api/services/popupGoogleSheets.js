@@ -1,9 +1,19 @@
 import { google } from "googleapis";
 
-const auth = new google.auth.GoogleAuth({
-  keyFile: "credentials.json",
-  scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-});
+const getAuth = () => {
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    return new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+  }
+  return new google.auth.GoogleAuth({
+    keyFile: "credentials.json",
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+};
+
+const auth = getAuth();
 
 const appendPopupLead = async (data) => {
   try {

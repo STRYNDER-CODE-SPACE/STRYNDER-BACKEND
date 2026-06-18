@@ -1,12 +1,22 @@
 import { google } from "googleapis";
 
+const getAuth = () => {
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    return new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+  }
+  return new google.auth.GoogleAuth({
+    keyFile: "credentials.json",
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+};
+
 const appendToSheet = async (data) => {
   try {
 
-    const auth = new google.auth.GoogleAuth({
-      keyFile: "credentials.json",
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
+    const auth = getAuth();
 
     const sheets = google.sheets({
       version: "v4",

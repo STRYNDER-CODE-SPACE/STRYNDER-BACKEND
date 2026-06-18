@@ -251,6 +251,12 @@ app.post("/popup-lead", inquiryLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Popup Lead Error:", error.message);
+    if (error.cause) {
+      console.error("Caused by:", error.cause.message);
+      if (error.cause.response) {
+        console.error("Response data:", error.cause.response.data);
+      }
+    }
     return res.status(500).json({
       success: false,
       message:
