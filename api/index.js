@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import axios from "axios";
-import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
@@ -25,14 +24,25 @@ if (process.env.NODE_ENV !== "production") {
   allowedOrigins.push("http://localhost:5173");
 }
 
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
-    credentials: true,
-  })
-);
+// Manual CORS middleware — handles both preflight (OPTIONS) and regular requests
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  // If the request origin is in our allowed list, echo it back
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+
+  // Handle preflight OPTIONS requests — respond 200 immediately
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
 
 // =========================
 // SECURITY MIDDLEWARE
