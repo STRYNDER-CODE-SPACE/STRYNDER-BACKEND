@@ -2,8 +2,10 @@ import { google } from "googleapis";
 
 const getAuth = () => {
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    // Strip BOM in case the env var was saved with one
+    const cleanJson = process.env.GOOGLE_CREDENTIALS_JSON.replace(/^﻿/, "");
     return new google.auth.GoogleAuth({
-      credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON),
+      credentials: JSON.parse(cleanJson),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
   }
