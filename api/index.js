@@ -14,6 +14,27 @@ import sendPopupEmail from "./services/sendPopUpEmail.js";
 const app = express();
 
 // =========================
+// CORS — must be first to handle preflight OPTIONS
+// =========================
+const allowedOrigins = [
+  "https://lively-rabanadas-5f4f57.netlify.app",
+  "https://strynder.com",
+];
+
+if (process.env.NODE_ENV !== "production") {
+  allowedOrigins.push("http://localhost:5173");
+}
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+    credentials: true,
+  })
+);
+
+// =========================
 // SECURITY MIDDLEWARE
 // =========================
 app.use(helmet());
@@ -45,27 +66,6 @@ const inquiryLimiter = rateLimit({
 });
 
 app.use(generalLimiter);
-
-// =========================
-// CORS
-// =========================
-const allowedOrigins = [
-  "https://lively-rabanadas-5f4f57.netlify.app",
-  "https://strynder.com",
-];
-
-if (process.env.NODE_ENV !== "production") {
-  allowedOrigins.push("http://localhost:5173");
-}
-
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type"],
-    credentials: true,
-  })
-);
 
 // =========================
 // HELPERS
