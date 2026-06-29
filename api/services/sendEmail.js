@@ -50,7 +50,7 @@ const sendEmails = async (data) => {
           </p>
 
         <a 
-          href="https://calendly.com/lawaltosine01/30min"
+          href="https://calendly.com/strynderhelp/30min"
           style="
             background:#7416F3;
             color:white;
