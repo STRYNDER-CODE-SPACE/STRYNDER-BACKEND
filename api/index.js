@@ -275,6 +275,8 @@ app.post("/popup-lead", inquiryLimiter, async (req, res) => {
   }
 });
 
+console.log("ADMIN_EMAIL:", process.env.ADMIN_EMAIL);
+
 // =========================
 // START SERVER
 // =========================
